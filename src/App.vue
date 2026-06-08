@@ -188,7 +188,14 @@
         </div>
       </section>
 
-      <section class="guitar-stage" :class="`guitar-stage--${selectedInstrument.id}`">
+      <section
+        class="guitar-stage"
+        :class="`guitar-stage--${selectedInstrument.id}`"
+        @pointermove.prevent="handleStagePointerMove"
+        @pointerup="stopStringGesture"
+        @pointercancel="stopStringGesture"
+        @pointerleave="stopStringGesture"
+      >
         <div class="guitar-body" aria-hidden="true">
           <div class="guitar-body__hole"></div>
           <div class="guitar-body__bridge"></div>
@@ -210,9 +217,10 @@
               class="string"
               :class="{ 'string--active': activeStrings.has(string.key) }"
               type="button"
+              :data-string-key="string.key"
               :style="{ '--string-top': `${string.position}%`, '--string-size': `${string.size}px` }"
               :aria-label="`Сыграть струну ${string.label}, клавиша ${string.key}`"
-              @pointerdown.prevent="playString(string)"
+              @pointerdown.prevent="startStringGesture(string, $event)"
               @pointerenter="handleStringHover(string, $event)"
             >
               <span class="string__line"></span>
@@ -248,16 +256,16 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const instruments = [
-  { id: 'electric', name: 'Электрогитара', attack: 0.006, decay: 1.6, waveform: 'sawtooth', filter: 1800 },
-  { id: 'classic', name: 'Классическая гитара', attack: 0.018, decay: 2.25, waveform: 'triangle', filter: 920 },
-  { id: 'bass', name: 'Бас-гитара', attack: 0.012, decay: 1.45, waveform: 'square', filter: 420 },
+  { id: 'electric', name: 'Электрогитара', attack: 0.004, decay: 1.85, waveform: 'triangle', filter: 1650, pick: 0.2, level: 0.82 },
+  { id: 'classic', name: 'Классическая гитара', attack: 0.014, decay: 2.45, waveform: 'sine', filter: 1180, pick: 0.14, level: 0.78 },
+  { id: 'bass', name: 'Бас-гитара', attack: 0.01, decay: 1.65, waveform: 'sine', filter: 360, pick: 0.08, level: 0.9 },
 ];
 
 const ampPresets = [
-  { id: 'clean', name: 'Clean', description: 'ярко', drive: 18, tone: 2100, delay: 0, feedback: 0, tremolo: 0 },
-  { id: 'crunch', name: 'Crunch', description: 'перегруз', drive: 70, tone: 1600, delay: 0.08, feedback: 0.12, tremolo: 0 },
-  { id: 'lead', name: 'Lead', description: 'соло', drive: 125, tone: 2400, delay: 0.16, feedback: 0.24, tremolo: 0 },
-  { id: 'space', name: 'Space', description: 'эхо', drive: 42, tone: 1900, delay: 0.28, feedback: 0.36, tremolo: 0.22 },
+  { id: 'clean', name: 'Clean', description: 'тепло', drive: 8, tone: 1750, delay: 0, feedback: 0, tremolo: 0 },
+  { id: 'crunch', name: 'Crunch', description: 'мягкий драйв', drive: 36, tone: 1450, delay: 0.07, feedback: 0.1, tremolo: 0 },
+  { id: 'lead', name: 'Lead', description: 'плотно', drive: 62, tone: 1850, delay: 0.14, feedback: 0.2, tremolo: 0 },
+  { id: 'space', name: 'Space', description: 'эхо', drive: 24, tone: 1550, delay: 0.26, feedback: 0.32, tremolo: 0.18 },
 ];
 
 const guitarStrings = [
@@ -376,6 +384,8 @@ let effectNodes = [];
 let recordingStartTime = 0;
 let loopStartTime = 0;
 let loopTimer;
+let isStrumming = false;
+let lastStrummedKey = '';
 
 const selectedInstrument = computed(() => {
   return instruments.find((instrument) => instrument.id === selectedInstrumentId.value) || instruments[0];
@@ -545,35 +555,93 @@ function playString(string, options = {}) {
 
 function playInstrumentTone(frequency, instrument, destination) {
   const now = audioContext.currentTime;
-  const oscillator = audioContext.createOscillator();
+  const body = audioContext.createOscillator();
   const overtone = audioContext.createOscillator();
-  const gain = audioContext.createGain();
+  const shimmer = audioContext.createOscillator();
+  const bodyGain = audioContext.createGain();
+  const overtoneGain = audioContext.createGain();
+  const shimmerGain = audioContext.createGain();
+  const pluckGain = audioContext.createGain();
+  const pluckFilter = audioContext.createBiquadFilter();
   const filter = audioContext.createBiquadFilter();
+  const output = audioContext.createGain();
   const isElectric = instrument.id === 'electric';
   const isBass = instrument.id === 'bass';
+  const peak = Math.max(volume.value * (instrument.level || 0.8), 0.001);
+  const toneFrequency = isElectric ? selectedPreset.value.tone : instrument.filter;
 
-  oscillator.type = instrument.waveform;
-  oscillator.frequency.setValueAtTime(frequency, now);
-  overtone.type = isElectric ? 'square' : 'sine';
-  overtone.frequency.setValueAtTime(frequency * (isBass ? 1.5 : 2.01), now);
+  body.type = instrument.waveform;
+  body.frequency.setValueAtTime(frequency, now);
+  body.detune.setValueAtTime(isBass ? -2 : -4, now);
+  overtone.type = isBass ? 'triangle' : 'sine';
+  overtone.frequency.setValueAtTime(frequency * (isBass ? 1.01 : 1.005), now);
+  overtone.detune.setValueAtTime(isBass ? 3 : 5, now);
+  shimmer.type = 'sine';
+  shimmer.frequency.setValueAtTime(frequency * (isBass ? 2 : 2.01), now);
 
-  filter.type = isElectric ? 'bandpass' : 'lowpass';
-  filter.frequency.setValueAtTime(isElectric ? selectedPreset.value.tone : instrument.filter, now);
-  filter.Q.setValueAtTime(isElectric ? 8 : isBass ? 6 : 2.4, now);
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(toneFrequency, now);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(toneFrequency * 0.58, 180), now + instrument.decay);
+  filter.Q.setValueAtTime(isElectric ? 1.8 : isBass ? 1.2 : 1.6, now);
 
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(Math.max(volume.value, 0.001), now + instrument.attack);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + instrument.decay);
+  bodyGain.gain.setValueAtTime(0.0001, now);
+  bodyGain.gain.exponentialRampToValueAtTime(peak, now + instrument.attack);
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + instrument.decay);
+  overtoneGain.gain.setValueAtTime(0.0001, now);
+  overtoneGain.gain.exponentialRampToValueAtTime(peak * (isBass ? 0.32 : 0.42), now + instrument.attack + 0.004);
+  overtoneGain.gain.exponentialRampToValueAtTime(0.0001, now + instrument.decay * 0.82);
+  shimmerGain.gain.setValueAtTime(0.0001, now);
+  shimmerGain.gain.exponentialRampToValueAtTime(peak * (isElectric ? 0.18 : 0.12), now + 0.012);
+  shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + instrument.decay * 0.38);
+  output.gain.value = isBass ? 0.92 : 0.76;
 
-  oscillator.connect(filter);
-  overtone.connect(filter);
-  filter.connect(gain);
-  gain.connect(destination);
+  body.connect(bodyGain);
+  overtone.connect(overtoneGain);
+  shimmer.connect(shimmerGain);
+  bodyGain.connect(filter);
+  overtoneGain.connect(filter);
+  shimmerGain.connect(filter);
+  filter.connect(output);
+  output.connect(destination);
 
-  oscillator.start(now);
+  const pluckSource = createPluckSource();
+  if (pluckSource) {
+    pluckFilter.type = isBass ? 'bandpass' : 'highpass';
+    pluckFilter.frequency.value = isBass ? 720 : isElectric ? 2600 : 1800;
+    pluckFilter.Q.value = isBass ? 0.7 : 1.1;
+    pluckGain.gain.setValueAtTime(0.0001, now);
+    pluckGain.gain.exponentialRampToValueAtTime(peak * instrument.pick, now + 0.003);
+    pluckGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+    pluckSource.connect(pluckFilter);
+    pluckFilter.connect(pluckGain);
+    pluckGain.connect(destination);
+    pluckSource.start(now);
+    pluckSource.stop(now + 0.04);
+  }
+
+  body.start(now);
   overtone.start(now);
-  oscillator.stop(now + instrument.decay + 0.05);
+  shimmer.start(now);
+  body.stop(now + instrument.decay + 0.05);
   overtone.stop(now + instrument.decay + 0.05);
+  shimmer.stop(now + instrument.decay * 0.5);
+}
+
+function createPluckSource() {
+  if (!audioContext) return null;
+
+  const length = Math.floor(audioContext.sampleRate * 0.045);
+  const buffer = audioContext.createBuffer(1, length, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  const source = audioContext.createBufferSource();
+
+  for (let i = 0; i < length; i += 1) {
+    const fade = 1 - i / length;
+    data[i] = (Math.random() * 2 - 1) * fade;
+  }
+
+  source.buffer = buffer;
+  return source;
 }
 
 function playBassTone(noteLabel) {
@@ -632,9 +700,37 @@ function markActive(key) {
 }
 
 function handleStringHover(string, event) {
+  if (isStrumming) return;
+
   if (event.buttons === 1 || event.pointerType === 'touch') {
     playString(string);
   }
+}
+
+function startStringGesture(string, event) {
+  isStrumming = true;
+  lastStrummedKey = string.key;
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+  playString(string);
+}
+
+function handleStagePointerMove(event) {
+  if (!isStrumming) return;
+
+  const stringElement = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.string');
+  const key = stringElement?.dataset?.stringKey;
+  if (!key || key === lastStrummedKey) return;
+
+  const string = playableStrings.value.find((item) => item.key === key);
+  if (string) {
+    lastStrummedKey = key;
+    playString(string);
+  }
+}
+
+function stopStringGesture() {
+  isStrumming = false;
+  lastStrummedKey = '';
 }
 
 function handleKeydown(event) {

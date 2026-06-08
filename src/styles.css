@@ -585,6 +585,22 @@ h1 {
   }
 }
 
+@keyframes string-vibrate-vertical {
+  0%,
+  100% {
+    transform: translateX(-50%);
+  }
+  25% {
+    transform: translateX(calc(-50% - 3px));
+  }
+  50% {
+    transform: translateX(calc(-50% + 3px));
+  }
+  75% {
+    transform: translateX(calc(-50% - 2px));
+  }
+}
+
 @media (max-width: 820px) {
   .app-shell {
     padding: 18px;
@@ -617,33 +633,100 @@ h1 {
   }
 
   .guitar-stage {
-    min-height: 620px;
+    min-height: 740px;
   }
 
   .guitar-body {
     left: 50%;
-    top: 186px;
-    width: min(300px, 78vw);
+    top: 166px;
+    width: min(255px, 70vw);
     transform: translate(-50%, -50%);
   }
 
-  .neck {
-    left: 16px;
-    right: 16px;
+  .guitar-body::after {
+    right: 50%;
     top: auto;
-    bottom: 78px;
+    bottom: -46px;
+    width: 72px;
+    height: 92px;
+    transform: translateX(50%);
+  }
+
+  .neck {
+    left: 50%;
+    right: auto;
+    top: 282px;
+    bottom: 26px;
+    display: flex;
+    flex-direction: column;
+    width: min(250px, 74vw);
+    transform: translateX(-50%);
   }
 
   .headstock {
-    width: 62px;
+    display: grid;
+    grid-template-columns: repeat(3, 18px);
+    width: 92px;
+    height: 66px;
+    margin: 0 auto -2px;
+    padding: 12px 16px;
+    border-radius: 18px 18px 8px 8px;
   }
 
   .fretboard {
-    height: 190px;
+    width: 100%;
+    height: 100%;
+    min-height: 390px;
+  }
+
+  .frets {
+    grid-template-columns: none;
+    grid-template-rows: repeat(10, 1fr);
+  }
+
+  .frets span {
+    border-right: 0;
+    border-bottom: 3px solid rgba(232, 225, 205, 0.72);
   }
 
   .string {
-    height: 38px;
+    top: 0;
+    bottom: 0;
+    left: var(--string-top);
+    right: auto;
+    width: 42px;
+    height: auto;
+    transform: translateX(-50%);
+  }
+
+  .string__line {
+    left: 50%;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    width: var(--string-size);
+    height: auto;
+    transform: translateX(-50%);
+  }
+
+  .string--active .string__line {
+    animation: string-vibrate-vertical 160ms linear;
+  }
+
+  .string__note,
+  .string__key {
+    left: 50%;
+    right: auto;
+    top: auto;
+    transform: translateX(-50%);
+  }
+
+  .string__note {
+    bottom: 12px;
+  }
+
+  .string__key {
+    top: 12px;
   }
 }
 
@@ -655,10 +738,6 @@ h1 {
 
   .segmented__button {
     width: 100%;
-  }
-
-  .headstock {
-    display: none;
   }
 
   .preset-grid,
