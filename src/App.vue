@@ -219,13 +219,35 @@
               type="button"
               :data-string-key="string.key"
               :style="{ '--string-top': `${string.position}%`, '--string-size': `${string.size}px` }"
-              :aria-label="`Сыграть струну ${string.label}, клавиша ${string.key}`"
+              :aria-label="`Сыграть струну ${string.label}, лад ${selectedFret(string.key)}, клавиша ${string.key}`"
               @pointerdown.prevent="startStringGesture(string, $event)"
               @pointerenter="handleStringHover(string, $event)"
             >
               <span class="string__line"></span>
-              <span class="string__note">{{ string.label }}</span>
+              <span class="string__note">{{ string.label }}{{ selectedFret(string.key) ? `+${selectedFret(string.key)}` : '' }}</span>
               <span class="string__key">{{ string.key }}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-board" aria-label="Зажатые лады">
+        <div class="tab-board__top">
+          <h2>Табы / зажим ладов</h2>
+          <button class="action-button" type="button" @click="clearFrets">Открытые струны</button>
+        </div>
+        <div v-for="string in playableStrings" :key="`tab-${string.key}`" class="tab-row">
+          <span class="tab-row__label">{{ string.label }}</span>
+          <div class="tab-row__frets">
+            <button
+              v-for="fret in fretOptions"
+              :key="`${string.key}-${fret}`"
+              class="fret-button"
+              :class="{ 'fret-button--active': selectedFret(string.key) === fret }"
+              type="button"
+              @click="setStringFret(string.key, fret)"
+            >
+              {{ fret }}
             </button>
           </div>
         </div>
@@ -240,7 +262,7 @@
           @pointerdown.prevent="playChord(chord)"
         >
           <strong>{{ chord.name }}</strong>
-          <span>{{ chord.keys.join(' ') }}</span>
+          <span>{{ chordTabText(chord) }}</span>
         </button>
       </section>
 
@@ -285,18 +307,18 @@ const bassStrings = [
 ];
 
 const chords = [
-  { name: 'Em', keys: ['A', 'D', 'F', 'G', 'H'] },
-  { name: 'E', keys: ['A', 'S', 'D', 'F', 'G', 'H'] },
-  { name: 'G', keys: ['A', 'S', 'D', 'G', 'H'] },
-  { name: 'C', keys: ['S', 'D', 'F', 'G'] },
-  { name: 'D', keys: ['D', 'F', 'G', 'H'] },
-  { name: 'Am', keys: ['S', 'D', 'F', 'G', 'H'] },
-  { name: 'A', keys: ['S', 'D', 'F', 'G'] },
-  { name: 'F', keys: ['A', 'D', 'F', 'G'] },
-  { name: 'Bm', keys: ['S', 'D', 'F', 'H'] },
-  { name: 'Dm', keys: ['D', 'F', 'H'] },
-  { name: 'Cmaj7', keys: ['S', 'D', 'G', 'H'] },
-  { name: 'G7', keys: ['A', 'S', 'F', 'G', 'H'] },
+  { name: 'Em', keys: ['A', 'D', 'F', 'G', 'H'], frets: { A: 0, S: 2, D: 2, F: 0, G: 0, H: 0 } },
+  { name: 'E', keys: ['A', 'S', 'D', 'F', 'G', 'H'], frets: { A: 0, S: 2, D: 2, F: 1, G: 0, H: 0 } },
+  { name: 'G', keys: ['A', 'S', 'D', 'G', 'H'], frets: { A: 3, S: 2, D: 0, F: 0, G: 0, H: 3 } },
+  { name: 'C', keys: ['S', 'D', 'F', 'G', 'H'], frets: { A: 0, S: 3, D: 2, F: 0, G: 1, H: 0 } },
+  { name: 'D', keys: ['D', 'F', 'G', 'H'], frets: { A: 0, S: 0, D: 0, F: 2, G: 3, H: 2 } },
+  { name: 'Am', keys: ['S', 'D', 'F', 'G', 'H'], frets: { A: 0, S: 0, D: 2, F: 2, G: 1, H: 0 } },
+  { name: 'A', keys: ['S', 'D', 'F', 'G', 'H'], frets: { A: 0, S: 0, D: 2, F: 2, G: 2, H: 0 } },
+  { name: 'F', keys: ['A', 'D', 'F', 'G'], frets: { A: 1, S: 3, D: 3, F: 2, G: 1, H: 1 } },
+  { name: 'Bm', keys: ['S', 'D', 'F', 'G', 'H'], frets: { A: 0, S: 2, D: 4, F: 4, G: 3, H: 2 } },
+  { name: 'Dm', keys: ['D', 'F', 'G', 'H'], frets: { A: 0, S: 0, D: 0, F: 2, G: 3, H: 1 } },
+  { name: 'Cmaj7', keys: ['S', 'D', 'F', 'G', 'H'], frets: { A: 0, S: 3, D: 2, F: 0, G: 0, H: 0 } },
+  { name: 'G7', keys: ['A', 'S', 'D', 'F', 'G', 'H'], frets: { A: 3, S: 2, D: 0, F: 0, G: 0, H: 1 } },
 ];
 
 const bassPatterns = [
@@ -351,6 +373,7 @@ const drumPatterns = [
 ];
 
 const frets = Array.from({ length: 10 }, (_, index) => index + 1);
+const fretOptions = [0, 1, 2, 3, 4, 5];
 const selectedInstrumentId = ref('electric');
 const ampPresetId = ref('clean');
 const volume = ref(0.72);
@@ -364,6 +387,7 @@ const bassPatternId = ref('roots');
 const drumPatternId = ref('rock');
 const audioReady = ref(false);
 const activeStrings = ref(new Set());
+const heldFrets = ref({});
 const recordedEvents = ref([]);
 const isRecording = ref(false);
 const loopPlaying = ref(false);
@@ -545,11 +569,12 @@ function playString(string, options = {}) {
 
   if (!audioContext || !effectInput) return;
 
-  playInstrumentTone(string.frequency, selectedInstrument.value, effectInput);
+  const fret = options.fret ?? selectedFret(string.key);
+  playInstrumentTone(frettedFrequency(string.frequency, fret), selectedInstrument.value, effectInput);
   markActive(string.key);
 
   if (options.record !== false) {
-    recordNote(string.key);
+    recordNote(string.key, fret);
   }
 }
 
@@ -666,6 +691,7 @@ function noteToFrequency(noteLabel) {
 }
 
 function playChord(chord) {
+  applyChordFrets(chord);
   const availableStrings = selectedInstrumentId.value === 'bass' ? guitarStrings : playableStrings.value;
   chord.keys.forEach((key, index) => {
     const string = availableStrings.find((item) => item.key === key);
@@ -675,7 +701,34 @@ function playChord(chord) {
   });
 }
 
-function recordNote(key) {
+function selectedFret(key) {
+  return heldFrets.value[key] || 0;
+}
+
+function setStringFret(key, fret) {
+  heldFrets.value = {
+    ...heldFrets.value,
+    [key]: fret,
+  };
+}
+
+function clearFrets() {
+  heldFrets.value = {};
+}
+
+function applyChordFrets(chord) {
+  heldFrets.value = { ...chord.frets };
+}
+
+function frettedFrequency(frequency, fret) {
+  return frequency * 2 ** (fret / 12);
+}
+
+function chordTabText(chord) {
+  return guitarStrings.map((string) => chord.frets[string.key] ?? 0).join('-');
+}
+
+function recordNote(key, fret) {
   if (!isRecording.value || !audioContext) return;
 
   const time = Math.max(0, audioContext.currentTime - recordingStartTime);
@@ -683,6 +736,7 @@ function recordNote(key) {
     ...recordedEvents.value,
     {
       key,
+      fret,
       time: loopPlaying.value ? (audioContext.currentTime - loopStartTime) % loopDuration.value : time,
       instrumentId: selectedInstrumentId.value,
       ampPresetId: ampPresetId.value,
@@ -947,7 +1001,7 @@ function playLoopPass() {
       const string = stringSet.find((item) => item.key === event.key);
 
       if (string) {
-        playString(string, { record: false });
+        playString(string, { record: false, fret: event.fret || 0 });
       }
 
       selectedInstrumentId.value = previousInstrument;
