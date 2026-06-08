@@ -31,6 +31,11 @@
           <span>Громкость</span>
           <input v-model.number="volume" type="range" min="0" max="1" step="0.01" />
         </label>
+
+        <label class="toggle-control">
+          <input v-model="phoneSpeakerMode" type="checkbox" />
+          <span>Динамик телефона</span>
+        </label>
       </div>
 
       <section class="control-grid" aria-label="Панель эффектов и записи">
@@ -377,6 +382,7 @@ const fretOptions = Array.from({ length: 25 }, (_, fret) => fret);
 const selectedInstrumentId = ref('electric');
 const ampPresetId = ref('clean');
 const volume = ref(0.72);
+const phoneSpeakerMode = ref(true);
 const bpm = ref(100);
 const currentBeat = ref(1);
 const rhythmStep = ref(0);
@@ -583,9 +589,11 @@ function playInstrumentTone(frequency, instrument, destination) {
   const body = audioContext.createOscillator();
   const overtone = audioContext.createOscillator();
   const shimmer = audioContext.createOscillator();
+  const phoneVoice = audioContext.createOscillator();
   const bodyGain = audioContext.createGain();
   const overtoneGain = audioContext.createGain();
   const shimmerGain = audioContext.createGain();
+  const phoneVoiceGain = audioContext.createGain();
   const pluckGain = audioContext.createGain();
   const pluckFilter = audioContext.createBiquadFilter();
   const filter = audioContext.createBiquadFilter();
@@ -594,6 +602,7 @@ function playInstrumentTone(frequency, instrument, destination) {
   const isBass = instrument.id === 'bass';
   const peak = Math.max(volume.value * (instrument.level || 0.8), 0.001);
   const toneFrequency = isElectric ? selectedPreset.value.tone : instrument.filter;
+  const phoneMode = phoneSpeakerMode.value;
 
   body.type = instrument.waveform;
   body.frequency.setValueAtTime(frequency, now);
@@ -603,11 +612,13 @@ function playInstrumentTone(frequency, instrument, destination) {
   overtone.detune.setValueAtTime(isBass ? 3 : 5, now);
   shimmer.type = 'sine';
   shimmer.frequency.setValueAtTime(frequency * (isBass ? 2 : 2.01), now);
+  phoneVoice.type = isBass ? 'triangle' : 'sine';
+  phoneVoice.frequency.setValueAtTime(frequency * (isBass ? 4 : 2), now);
 
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(toneFrequency, now);
-  filter.frequency.exponentialRampToValueAtTime(Math.max(toneFrequency * 0.58, 180), now + instrument.decay);
-  filter.Q.setValueAtTime(isElectric ? 1.8 : isBass ? 1.2 : 1.6, now);
+  filter.frequency.setValueAtTime(phoneMode ? Math.max(toneFrequency, 1850) : toneFrequency, now);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(toneFrequency * (phoneMode ? 0.78 : 0.58), 240), now + instrument.decay);
+  filter.Q.setValueAtTime(phoneMode ? 1.35 : isElectric ? 1.8 : isBass ? 1.2 : 1.6, now);
 
   bodyGain.gain.setValueAtTime(0.0001, now);
   bodyGain.gain.exponentialRampToValueAtTime(peak, now + instrument.attack);
@@ -616,16 +627,21 @@ function playInstrumentTone(frequency, instrument, destination) {
   overtoneGain.gain.exponentialRampToValueAtTime(peak * (isBass ? 0.32 : 0.42), now + instrument.attack + 0.004);
   overtoneGain.gain.exponentialRampToValueAtTime(0.0001, now + instrument.decay * 0.82);
   shimmerGain.gain.setValueAtTime(0.0001, now);
-  shimmerGain.gain.exponentialRampToValueAtTime(peak * (isElectric ? 0.18 : 0.12), now + 0.012);
+  shimmerGain.gain.exponentialRampToValueAtTime(peak * (isElectric ? 0.18 : 0.12) * (phoneMode ? 1.45 : 1), now + 0.012);
   shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + instrument.decay * 0.38);
-  output.gain.value = isBass ? 0.92 : 0.76;
+  phoneVoiceGain.gain.setValueAtTime(0.0001, now);
+  phoneVoiceGain.gain.exponentialRampToValueAtTime(phoneMode ? peak * (isBass ? 0.52 : 0.24) : 0.0001, now + 0.014);
+  phoneVoiceGain.gain.exponentialRampToValueAtTime(0.0001, now + instrument.decay * (isBass ? 0.75 : 0.44));
+  output.gain.value = isBass ? (phoneMode ? 1.05 : 0.92) : phoneMode ? 0.86 : 0.76;
 
   body.connect(bodyGain);
   overtone.connect(overtoneGain);
   shimmer.connect(shimmerGain);
+  phoneVoice.connect(phoneVoiceGain);
   bodyGain.connect(filter);
   overtoneGain.connect(filter);
   shimmerGain.connect(filter);
+  phoneVoiceGain.connect(filter);
   filter.connect(output);
   output.connect(destination);
 
@@ -647,9 +663,11 @@ function playInstrumentTone(frequency, instrument, destination) {
   body.start(now);
   overtone.start(now);
   shimmer.start(now);
+  phoneVoice.start(now);
   body.stop(now + instrument.decay + 0.05);
   overtone.stop(now + instrument.decay + 0.05);
   shimmer.stop(now + instrument.decay * 0.5);
+  phoneVoice.stop(now + instrument.decay * 0.78);
 }
 
 function createPluckSource() {

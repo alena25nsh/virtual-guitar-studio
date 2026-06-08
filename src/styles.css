@@ -328,6 +328,25 @@ h1 {
   accent-color: var(--accent);
 }
 
+.toggle-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 12px;
+  color: var(--text-muted);
+  background: #ffffff;
+  font-weight: 800;
+}
+
+.toggle-control input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 .select-control {
   min-height: 42px;
   min-width: 150px;
@@ -691,7 +710,8 @@ h1 {
   }
 
   .status,
-  .control {
+  .control,
+  .toggle-control {
     width: 100%;
   }
 
