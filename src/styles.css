@@ -588,11 +588,18 @@ h1 {
 
 .tab-row__frets {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-auto-columns: 42px;
+  grid-auto-flow: column;
+  grid-template-columns: none;
   gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
 }
 
 .fret-button {
+  width: 42px;
   min-height: 36px;
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -828,6 +835,11 @@ h1 {
   }
 
   .tab-row__frets {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-columns: 40px;
+    grid-template-columns: none;
+  }
+
+  .fret-button {
+    width: 40px;
   }
 }

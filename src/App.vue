@@ -373,7 +373,7 @@ const drumPatterns = [
 ];
 
 const frets = Array.from({ length: 10 }, (_, index) => index + 1);
-const fretOptions = [0, 1, 2, 3, 4, 5];
+const fretOptions = Array.from({ length: 25 }, (_, fret) => fret);
 const selectedInstrumentId = ref('electric');
 const ampPresetId = ref('clean');
 const volume = ref(0.72);
